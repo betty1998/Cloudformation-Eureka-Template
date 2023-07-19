@@ -65,9 +65,9 @@ Resources:
       Cpu: 512
       Memory: 1024
       NetworkMode: awsvpc
-      RuntimePlatform:
-        OperatingSystemFamily: LINUX
-        CpuArchitecture: ARM64
+      # RuntimePlatform:
+      #   OperatingSystemFamily: LINUX
+      #   CpuArchitecture: ARM64
       TaskRoleArn: !Ref EurekaRole
       ExecutionRoleArn: !Ref EurekaExecutionRole
       RequiresCompatibilities:
@@ -136,9 +136,9 @@ Resources:
       Family: !Sub api-gateway-task
       Cpu: 512
       Memory: 1024
-      RuntimePlatform:
-        OperatingSystemFamily: LINUX
-        CpuArchitecture: ARM64
+      # RuntimePlatform:
+      #   OperatingSystemFamily: LINUX
+      #   CpuArchitecture: ARM64
       NetworkMode: awsvpc
       TaskRoleArn: !Ref EurekaRole
       ExecutionRoleArn: !Ref EurekaExecutionRole
@@ -222,9 +222,9 @@ Resources:
       Cpu: 512
       Memory: 1024
       NetworkMode: awsvpc
-      RuntimePlatform:
-        OperatingSystemFamily: LINUX
-        CpuArchitecture: ARM64
+      # RuntimePlatform:
+      #   OperatingSystemFamily: LINUX
+      #   CpuArchitecture: ARM64
       TaskRoleArn: !Ref EurekaRole
       ExecutionRoleArn: !Ref EurekaExecutionRole
       RequiresCompatibilities:
@@ -311,9 +311,9 @@ Resources:
       Cpu: 512
       Memory: 1024
       NetworkMode: awsvpc
-      RuntimePlatform:
-        OperatingSystemFamily: LINUX
-        CpuArchitecture: ARM64
+      # RuntimePlatform:
+      #   OperatingSystemFamily: LINUX
+      #   CpuArchitecture: ARM64
       TaskRoleArn: !Ref EurekaRole
       ExecutionRoleArn: !Ref EurekaExecutionRole
       RequiresCompatibilities:
