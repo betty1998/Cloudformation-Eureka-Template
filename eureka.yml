@@ -23,14 +23,6 @@ Resources:
             Effect: Allow
             Principal:
               Service: ecs-tasks.amazonaws.com
-      Policies:
-      - PolicyName: ECRGetRolePolicy
-        PolicyDocument:
-          Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action: iam:GetRole
-              Resource: "arn:aws:iam::aws:role/eureka-execution-role"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
   EurekaRole:
@@ -83,7 +75,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: eureka-server
-          Image: betty1998/service-registry:latest
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/service-registry:latest
           PortMappings:
             - ContainerPort: 8761
           LogConfiguration:
@@ -155,7 +147,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: api-gateway
-          Image: betty1998/api-gateway:latest
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/api-gateway:latest
           PortMappings:
             - ContainerPort: 9191
           LogConfiguration:
@@ -240,7 +232,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: wine-aura
-          Image: betty1998/wine-aura:latest
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/wine-aura:latest
           PortMappings:
             - ContainerPort: 8080
           LogConfiguration:
@@ -329,7 +321,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: auth-service
-          Image: betty1998/auth-service:latest
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/auth-service:latest
           PortMappings:
             - ContainerPort: 8082
           LogConfiguration:
