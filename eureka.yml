@@ -23,6 +23,14 @@ Resources:
             Effect: Allow
             Principal:
               Service: ecs-tasks.amazonaws.com
+      Policies:
+      - PolicyName: ECRGetRolePolicy
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action: iam:GetRole
+              Resource: "arn:aws:iam::aws:role/eureka-execution-role"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
   EurekaRole:
