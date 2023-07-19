@@ -75,7 +75,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: eureka-server
-          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/service-registry:latest
+          Image: betty1998/service-registry:latest
           PortMappings:
             - ContainerPort: 8761
           LogConfiguration:
@@ -147,7 +147,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: api-gateway
-          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/api-gateway:latest
+          Image: betty1998/api-gateway:latest
           PortMappings:
             - ContainerPort: 9191
           LogConfiguration:
@@ -232,7 +232,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: wine-aura
-          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/wine-aura:latest
+          Image: betty1998/wine-aura:latest
           PortMappings:
             - ContainerPort: 8080
           LogConfiguration:
@@ -321,7 +321,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: auth-service
-          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/auth-service:latest
+          Image: betty1998/auth-service:latest
           PortMappings:
             - ContainerPort: 8082
           LogConfiguration:
