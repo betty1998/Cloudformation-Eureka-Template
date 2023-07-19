@@ -1,0 +1,383 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  PrivateDnsNamespaceName:
+    Type: String
+    Default: private
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://tomgregory-cloudformation-examples.s3-eu-west-1.amazonaws.com/default-vpc.yml
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: wine-aura-stack-cluster1
+  EurekaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: eureka-execution-role
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  EurekaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: eureka-role
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+  CloudwatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['-', [ECSLogGroup, !Ref 'AWS::StackName']]
+      RetentionInDays: 14
+  PrivateNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: !Ref PrivateDnsNamespaceName
+      Vpc: !GetAtt VPCStack.Outputs.VPC
+  EurekaServerDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+          - TTL: 60
+            Type: SRV
+      Name: eureka-server
+      NamespaceId: !Ref PrivateNamespace
+  EurekaServerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub eureka-server-task
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: ARM64
+      TaskRoleArn: !Ref EurekaRole
+      ExecutionRoleArn: !Ref EurekaExecutionRole
+      RequiresCompatibilities:
+        - FARGATE
+        - EC2
+      ContainerDefinitions:
+        - Name: eureka-server
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/service-registry:latest
+          PortMappings:
+            - ContainerPort: 8761
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudwatchLogsGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: eureka
+  EurekaServerService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref EurekaServerTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      PlatformVersion: 1.4.0
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !GetAtt VPCStack.Outputs.PublicSubnet1
+            - !GetAtt VPCStack.Outputs.PublicSubnet2
+          SecurityGroups:
+            - !GetAtt EurekaServerSecurityGroup.GroupId
+            # - sg-0ab2ebde7f4f0cd3f
+      ServiceRegistries:
+        - RegistryArn: !GetAtt EurekaServerDiscoveryService.Arn
+          Port: 8761
+  EurekaServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: EurekaServerSecurityGroup
+      GroupDescription: Security group for Eureka server
+      VpcId: !GetAtt VPCStack.Outputs.VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8761
+          ToPort: 8761
+          CidrIp: 0.0.0.0/0
+  ApiGatewayDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+          - TTL: 60
+            Type: SRV
+      Name: api-gateway
+      NamespaceId: !Ref PrivateNamespace
+  ApiGatewayTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub api-gateway-task
+      Cpu: 512
+      Memory: 1024
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: ARM64
+      NetworkMode: awsvpc
+      TaskRoleArn: !Ref EurekaRole
+      ExecutionRoleArn: !Ref EurekaExecutionRole
+      RequiresCompatibilities:
+        - FARGATE
+        - EC2
+      ContainerDefinitions:
+        - Name: api-gateway
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/api-gateway:latest
+          PortMappings:
+            - ContainerPort: 9191
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudwatchLogsGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: api-gateway
+          Environment:
+            - Name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              Value: !Sub
+                - 'http://${ServiceName}.${NamespaceName}:8761/eureka'
+                - ServiceName: !GetAtt EurekaServerDiscoveryService.Name
+                  NamespaceName: !Ref PrivateDnsNamespaceName
+            - Name: EUREKA_INSTANCE_HOSTNAME
+              Value: !Sub
+                - '${ServiceName}.${NamespaceName}'
+                - ServiceName: !GetAtt ApiGatewayDiscoveryService.Name
+                  NamespaceName: !Ref PrivateDnsNamespaceName
+  ApiGatewayService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref ApiGatewayTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      PlatformVersion: 1.4.0
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !GetAtt VPCStack.Outputs.PublicSubnet1
+            - !GetAtt VPCStack.Outputs.PublicSubnet2
+          SecurityGroups:
+            - !GetAtt ApiGatewaySecurityGroup.GroupId
+            # - sg-0ab2ebde7f4f0cd3f
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ApiGatewayDiscoveryService.Arn
+          Port: 9191
+  ApiGatewaySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ApiGatewaySecurityGroup
+      GroupDescription: Security group for api-gateway
+      VpcId: !GetAtt VPCStack.Outputs.VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 9191
+          ToPort: 9191
+          CidrIp: 0.0.0.0/0
+        # - IpProtocol: tcp
+        #   CidrIp: 0.0.0.0/0
+  WineAuraDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+          - TTL: 60
+            Type: SRV
+      Name: wine-aura
+      NamespaceId: !Ref PrivateNamespace
+  WineAuraTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub wine-aura-task
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: ARM64
+      TaskRoleArn: !Ref EurekaRole
+      ExecutionRoleArn: !Ref EurekaExecutionRole
+      RequiresCompatibilities:
+        - FARGATE
+        - EC2
+      ContainerDefinitions:
+        - Name: wine-aura
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/wine-aura:latest
+          PortMappings:
+            - ContainerPort: 8080
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudwatchLogsGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: wine-aura
+          Environment:
+            - Name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              Value: !Sub
+                - 'http://${ServiceName}.${NamespaceName}:8761/eureka'
+                - ServiceName: !GetAtt EurekaServerDiscoveryService.Name
+                  NamespaceName: !Ref PrivateDnsNamespaceName
+            - Name: EUREKA_INSTANCE_HOSTNAME
+              Value: !Sub
+                - '${ServiceName}.${NamespaceName}'
+                - ServiceName: !GetAtt WineAuraDiscoveryService.Name
+                  NamespaceName: !Ref PrivateDnsNamespaceName
+            - Name: db-host
+              Value: 'db-wine-aura.cyq1vqkt2cqu.us-east-1.rds.amazonaws.com'
+            - Name: spring.datasource.password
+              Value: 'postgresmercury'
+  WineAuraService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref WineAuraTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      PlatformVersion: 1.4.0
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !GetAtt VPCStack.Outputs.PublicSubnet1
+            - !GetAtt VPCStack.Outputs.PublicSubnet2
+          SecurityGroups:
+            - !GetAtt WineAuraSecurityGroup.GroupId
+            # - sg-0ab2ebde7f4f0cd3f
+            
+      ServiceRegistries:
+        - RegistryArn: !GetAtt WineAuraDiscoveryService.Arn
+          Port: 8080
+  WineAuraSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: WineAuraSecurityGroup
+      GroupDescription: Security group for wine-aura
+      VpcId: !GetAtt VPCStack.Outputs.VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+  
+  AuthDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+          - TTL: 60
+            Type: SRV
+      Name: auth-service
+      NamespaceId: !Ref PrivateNamespace
+  AuthTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub auth-service-task
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: ARM64
+      TaskRoleArn: !Ref EurekaRole
+      ExecutionRoleArn: !Ref EurekaExecutionRole
+      RequiresCompatibilities:
+        - FARGATE
+        - EC2
+      ContainerDefinitions:
+        - Name: auth-service
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/auth-service:latest
+          PortMappings:
+            - ContainerPort: 8082
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudwatchLogsGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: auth-service
+          Environment:
+            - Name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              Value: !Sub
+                - 'http://${ServiceName}.${NamespaceName}:8761/eureka'
+                - ServiceName: !GetAtt EurekaServerDiscoveryService.Name
+                  NamespaceName: !Ref PrivateDnsNamespaceName
+            - Name: EUREKA_INSTANCE_HOSTNAME
+              Value: !Sub
+                - '${ServiceName}.${NamespaceName}'
+                - ServiceName: !GetAtt AuthDiscoveryService.Name
+                  NamespaceName: !Ref PrivateDnsNamespaceName
+            - Name: db-host
+              Value: 'db-wine-aura.cyq1vqkt2cqu.us-east-1.rds.amazonaws.com'
+            - Name: spring.datasource.password
+              Value: 'postgresmercury'
+  AuthService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref AuthTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      PlatformVersion: 1.4.0
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !GetAtt VPCStack.Outputs.PublicSubnet1
+            - !GetAtt VPCStack.Outputs.PublicSubnet2
+          SecurityGroups:
+            - !GetAtt AuthSecurityGroup.GroupId
+            # - sg-0ab2ebde7f4f0cd3f
+            
+      ServiceRegistries:
+        - RegistryArn: !GetAtt AuthDiscoveryService.Arn
+          Port: 8082
+  AuthSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: AuthSecurityGroup
+      GroupDescription: Security group for wine-aura
+      VpcId: !GetAtt VPCStack.Outputs.VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8082
+          ToPort: 8082
+          CidrIp: 0.0.0.0/0
+  
