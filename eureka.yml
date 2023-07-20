@@ -232,7 +232,7 @@ Resources:
         - EC2
       ContainerDefinitions:
         - Name: wine-aura
-          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/wine-aura:latest
+          Image: 134283336620.dkr.ecr.us-east-1.amazonaws.com/wine-aura-docker:latest
           PortMappings:
             - ContainerPort: 8080
           LogConfiguration:
